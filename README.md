@@ -12,7 +12,18 @@
 curl -fsSL --connect-timeout 15 --max-time 120 https://raw.githubusercontent.com/akari-taomini/expand/main/install.sh -o "$HOME/tavern-memory.sh" && bash "$HOME/tavern-memory.sh"
 ```
 
-脚本下载成功后才会运行。它会寻找当前目录及家目录下常见的 SillyTavern 安装位置，然后询问安装路径和内存上限，预览改动，并要求输入 `y` 确认。下载的入口文件会保留在家目录，方便下次运行：
+脚本下载成功后才会运行。它会寻找当前目录及家目录下常见的 SillyTavern 安装位置，询问安装路径并检查读写权限，再显示以下选项：
+
+| 输入编号 | 内存上限 |
+| --- | --- |
+| 1 | 2048 MiB |
+| 2 | 4096 MiB |
+| 3 | 8192 MiB |
+| 4 | 16384 MiB |
+
+输入编号后，脚本会预览改动，要求输入 `y` 确认，然后自动备份并修改。选项表示 Node.js 内存上限，不代表手机一定能提供这些内存。
+
+下载的入口文件会保留在家目录，方便下次运行：
 
 ```bash
 bash "$HOME/tavern-memory.sh"

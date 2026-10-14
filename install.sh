@@ -96,8 +96,26 @@ async function interactive() {
     if (dir === '~') dir = os.homedir();
     if (dir.startsWith('~/')) dir = path.join(os.homedir(), dir.slice(2));
     if (!dir) fail('没有指定酒馆目录。');
+    dir = fs.realpathSync(path.resolve(dir));
+    const startFile = path.join(dir, 'start.sh');
+    readRegular(startFile);
+    readRegular(path.join(dir, 'server.js'));
+    try {
+      fs.accessSync(startFile, fs.constants.R_OK | fs.constants.W_OK);
+      fs.accessSync(dir, fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK);
+    } catch {
+      fail('当前 Termux 没有读写酒馆目录或 start.sh 的权限，请使用安装酒馆的 Termux 运行。');
+    }
+    console.log('目录和 start.sh 读写权限检查通过。');
     console.log(`系统报告总内存：${Math.floor(os.totalmem() / 1024 / 1024)} MiB；请给安卓系统和其他应用留出余量。`);
-    const size = (await ask('输入上限 MiB（例如 2048 或 4096，无默认值）：')).trim();
+    console.log('请选择内存上限：\n  1. 2048 MiB\n  2. 4096 MiB\n  3. 8192 MiB\n  4. 16384 MiB');
+    const sizes = { '1': '2048', '2': '4096', '3': '8192', '4': '16384' };
+    let choice;
+    do {
+      choice = (await ask('输入编号 1 / 2 / 3 / 4：')).trim();
+      if (!sizes[choice]) console.log('请输入 1、2、3 或 4。');
+    } while (!sizes[choice]);
+    const size = sizes[choice];
     const options = parse(['--dir', dir, '--size', size]);
     // Validate the target and show the exact change before asking to write it.
     await main({ ...options, dryRun: true });
