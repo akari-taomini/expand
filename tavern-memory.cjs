@@ -8,9 +8,16 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const readline = require('node:readline');
 
+const palette = { title: '1;35', info: '36', success: '1;32', warning: '1;33', error: '1;31', strong: '1;37', muted: '90' };
+function color(kind, text, stream = process.stdout) {
+  if (!stream.isTTY || process.env.NO_COLOR !== undefined || process.env.TERM === 'dumb') return text;
+  return `\x1b[${palette[kind]}m${text}\x1b[0m`;
+}
+function section(text) { console.log(`\n${color('title', `── ${text} ──`)}`); }
+
 function fail(message) { throw new Error(message); }
 function usage() {
-  console.log(`酒馆 Node.js 内存上限修改工具
+  console.log(`${color('title', '酒馆 Node.js 内存上限修改工具')}
 用法：
   node tavern-memory.cjs --dir ~/SillyTavern --size 4096 --dry-run
   node tavern-memory.cjs --dir ~/SillyTavern --size 4096
@@ -67,8 +74,9 @@ function save(file, original, updated, mode) {
   } finally {
     if (fs.existsSync(temp)) fs.unlinkSync(temp);
   }
-  console.log(`已保存：${file}\n修改前备份：${backup}`);
-  console.log('停止正在运行的酒馆，再通过 start.sh 启动后生效。');
+  console.log(color('success', `已保存：${file}`));
+  console.log(`${color('info', '修改前备份：')}\n${color('strong', backup)}`);
+  console.log(color('warning', '下一步：停止正在运行的酒馆，再通过 start.sh 启动后生效。'));
 }
 
 async function interactive() {
@@ -77,12 +85,16 @@ async function interactive() {
   const ask = (question) => new Promise(resolve => rl.question(question, resolve));
   rl.on('SIGINT', () => { rl.close(); process.exit(130); });
   try {
-    console.log('酒馆内存上限设置\n此工具修改 start.sh，自动备份；不会增加手机物理内存。');
+    section('酒馆内存上限设置');
+    console.log(color('info', '修改 start.sh · 自动备份 · 支持恢复'));
+    console.log(color('warning', '注意：调整的是 Node.js 内存上限，不会增加手机物理内存。'));
+    section('1 / 3 选择酒馆目录');
     const candidates = [...new Set([process.cwd(), path.join(os.homedir(), 'SillyTavern'), path.join(os.homedir(), 'sillytavern'), path.join(os.homedir(), 'Silly Tavern')])];
     const found = candidates.filter(dir => fs.existsSync(path.join(dir, 'start.sh')) && fs.existsSync(path.join(dir, 'server.js')));
     const suggested = found.length === 1 ? found[0] : '';
-    if (found.length > 1) console.log(`找到多个目录，请选择你的酒馆目录：\n${found.join('\n')}`);
-    const answer = (await ask(`酒馆目录${suggested ? ` [回车使用 ${suggested}]` : '（完整路径）'}：`)).trim();
+    if (found.length > 1) console.log(color('info', `找到多个目录，请选择你的酒馆目录：\n${found.join('\n')}`));
+    if (suggested) console.log(`${color('info', '检测到目录：')}\n${color('strong', suggested)}`);
+    const answer = (await ask(color('info', `酒馆目录${suggested ? ' [回车使用检测到的目录]' : '（完整路径）'}：`))).trim();
     let dir = answer || suggested;
     if (dir === '~') dir = os.homedir();
     if (dir.startsWith('~/')) dir = path.join(os.homedir(), dir.slice(2));
@@ -97,21 +109,30 @@ async function interactive() {
     } catch {
       fail('当前 Termux 没有读写酒馆目录或 start.sh 的权限，请使用安装酒馆的 Termux 运行。');
     }
-    console.log('目录和 start.sh 读写权限检查通过。');
-    console.log(`系统报告总内存：${Math.floor(os.totalmem() / 1024 / 1024)} MiB；请给安卓系统和其他应用留出余量。`);
-    console.log('请选择内存上限：\n  1. 2048 MiB\n  2. 4096 MiB\n  3. 8192 MiB\n  4. 16384 MiB');
+    console.log(color('success', '权限检查通过：目录和 start.sh 可读写。'));
+    section('2 / 3 选择内存上限');
+    console.log(`系统报告总内存：${color('strong', `${Math.floor(os.totalmem() / 1024 / 1024)} MiB`)}`);
+    console.log(color('warning', '请给安卓系统和其他应用留出余量，数值越大不代表越流畅。'));
+    console.log([
+      color('success', '  [1]   2048 MiB'),
+      color('info',    '  [2]   4096 MiB'),
+      color('warning', '  [3]   8192 MiB'),
+      color('title',   '  [4]  16384 MiB'),
+    ].join('\n'));
     const sizes = { '1': '2048', '2': '4096', '3': '8192', '4': '16384' };
     let choice;
     do {
-      choice = (await ask('输入编号 1 / 2 / 3 / 4：')).trim();
-      if (!sizes[choice]) console.log('请输入 1、2、3 或 4。');
+      choice = (await ask(color('strong', '输入编号 1 / 2 / 3 / 4：'))).trim();
+      if (!sizes[choice]) console.log(color('error', '无效选项：请输入 1、2、3 或 4。'));
     } while (!sizes[choice]);
     const size = sizes[choice];
+    console.log(color('success', `已选择：${size} MiB`));
+    section('3 / 3 预览并确认');
     const options = parse(['--dir', dir, '--size', size]);
     // Validate the target and show the exact change before asking to write it.
     await main({ ...options, dryRun: true });
-    const confirm = (await ask('应用以上设置？输入 y 确认，其他输入取消：')).trim().toLowerCase();
-    if (confirm !== 'y') { console.log('已取消，没有写文件。'); return null; }
+    const confirm = (await ask(color('warning', '应用以上设置？输入 y 确认，其他输入取消：'))).trim().toLowerCase();
+    if (confirm !== 'y') { console.log(color('info', '已取消，没有写文件。')); return null; }
     return options;
   } finally { rl.close(); }
 }
@@ -129,8 +150,8 @@ async function main(supplied) {
       fail('恢复来源必须是当前酒馆目录中本工具生成的 start.sh 备份。');
     }
     const source = readRegular(backup);
-    if (source.bytes.equals(original.bytes)) return console.log('当前文件与备份一致，无需恢复。');
-    if (options.dryRun) return console.log(`将用以下备份恢复 start.sh：${backup}\n仅预览，没有写文件。`);
+    if (source.bytes.equals(original.bytes)) return console.log(color('success', '当前文件与备份一致，无需恢复。'));
+    if (options.dryRun) return console.log(color('info', `将用以下备份恢复 start.sh：${backup}\n仅预览，没有写文件。`));
     save(file, original.bytes, source.bytes, original.mode);
     return;
   }
@@ -140,8 +161,8 @@ async function main(supplied) {
     fail(`当前 Node.js 架构为 ${process.arch}；此工具不对该架构设置超过 2048 MiB 的上限。`);
   }
   const total = Math.floor(os.totalmem() / 1024 / 1024);
-  console.log(`Node.js 架构：${process.arch}；系统报告总内存：${total} MiB`);
-  if (size > total / 2) console.log('提示：设置值超过总内存的一半，请确认系统和其他应用有足够余量。');
+  console.log(color('muted', `Node.js 架构：${process.arch}；系统报告总内存：${total} MiB`));
+  if (size > total / 2) console.log(color('warning', '内存提醒：设置值超过总内存的一半，请确认系统和其他应用有足够余量。'));
   const text = original.bytes.toString('utf8');
   if (!Buffer.from(text, 'utf8').equals(original.bytes)) fail('start.sh 不是有效 UTF-8 文本，未修改。');
   const lines = text.split('\n');
@@ -155,14 +176,15 @@ async function main(supplied) {
   if (matches.length !== 1) fail(`找到 ${matches.length} 条符合教程格式的启动命令，需要恰好一条。请提供你的 start.sh 内容以适配，文件未修改。`);
   const { index, match } = matches[0];
   const next = `${match[1]}--max-old-space-size=${size} ${match[4]}${match[5]}`;
-  console.log(`修改前：${lines[index].replace(/\r$/, '')}\n修改后：${next.replace(/\r$/, '')}`);
-  if (Number(match[3]) === size) return console.log('已有相同上限，无需修改。');
-  if (options.dryRun) return console.log('仅预览，没有写文件。');
+  console.log(`${color('muted', '修改前：')}\n${color('muted', lines[index].replace(/\r$/, ''))}`);
+  console.log(`${color('success', '修改后：')}\n${color('success', next.replace(/\r$/, ''))}`);
+  if (Number(match[3]) === size) return console.log(color('success', '已有相同上限，无需修改。'));
+  if (options.dryRun) return console.log(color('info', '仅预览，没有写文件。'));
   lines[index] = next;
   save(file, original.bytes, Buffer.from(lines.join('\n'), 'utf8'), original.mode);
 }
 
 main().catch(error => {
-  console.error(`失败：${error.message}`);
+  console.error(color('error', `失败：${error.message}`, process.stderr));
   process.exitCode = 1;
 });
